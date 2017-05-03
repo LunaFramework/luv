@@ -1,4 +1,4 @@
-# Added LUAJIT_ADD_EXECUTABLE Ryan Phillips <ryan at trolocsis.com>
+# Added LUA_ADD_EXECUTABLE Ryan Phillips <ryan at trolocsis.com>
 # This CMakeLists.txt has been first taken from LuaDist
 # Copyright (C) 2007-2011 LuaDist.
 # Created by Peter Drahoš
@@ -119,7 +119,7 @@ int main() { return 0; }
 ENDMACRO()
 
 
-FOREACH(arch X64 X86 ARM PPC PPCSPE MIPS)
+FOREACH(arch X64 X86 ARM ARM64 PPC PPCSPE MIPS)
   LJ_TEST_ARCH(LJ_TARGET_${arch})
   if(LJ_TARGET_${arch})
     STRING(TOLOWER ${arch} TARGET_LJARCH)
@@ -224,6 +224,10 @@ SET(SRC_LJCORE
   ${LUAJIT_DIR}/src/lj_gc.c
   ${LUAJIT_DIR}/src/lj_err.c
   ${LUAJIT_DIR}/src/lj_char.c
+  ${LUAJIT_DIR}/src/lj_buf.c
+  ${LUAJIT_DIR}/src/lj_profile.c
+  ${LUAJIT_DIR}/src/lj_strfmt.c
+  ${LUAJIT_DIR}/src/lj_strfmt_num.c
   ${LUAJIT_DIR}/src/lj_bc.c
   ${LUAJIT_DIR}/src/lj_obj.c
   ${LUAJIT_DIR}/src/lj_str.c
@@ -269,6 +273,7 @@ SET(SRC_LJCORE
   ${LUAJIT_DIR}/src/lj_cparse.c
   ${LUAJIT_DIR}/src/lj_lib.c
   ${LUAJIT_DIR}/src/lj_alloc.c
+  ${LUAJIT_DIR}/src/lj_vmmath.c
   ${LUAJIT_DIR}/src/lib_aux.c
   ${LUAJIT_DIR}/src/lib_init.c
   ${SRC_LJLIB})
@@ -280,6 +285,7 @@ SET(SRC_BUILDVM
   ${LUAJIT_DIR}/src/host/buildvm_lib.c
   ${LUAJIT_DIR}/src/host/buildvm_fold.c
   ${CMAKE_CURRENT_BINARY_DIR}/buildvm_arch.h)
+
 
 ## GENERATE
 ADD_EXECUTABLE(buildvm ${SRC_BUILDVM})
@@ -297,8 +303,8 @@ if (MSVC)
   add_buildvm_target ( lj_vm.obj peobj )
   set (LJ_VM_SRC ${CMAKE_CURRENT_BINARY_DIR}/lj_vm.obj)
 else ()
-  add_buildvm_target ( lj_vm.s ${LJVM_MODE} )
-  set (LJ_VM_SRC ${CMAKE_CURRENT_BINARY_DIR}/lj_vm.s)
+  add_buildvm_target ( lj_vm.S ${LJVM_MODE} )
+  set (LJ_VM_SRC ${CMAKE_CURRENT_BINARY_DIR}/lj_vm.S)
 endif ()
 add_buildvm_target ( lj_ffdef.h   ffdef   ${SRC_LJLIB} )
 add_buildvm_target ( lj_bcdef.h  bcdef  ${SRC_LJLIB} )
@@ -397,7 +403,7 @@ MACRO(LUAJIT_add_custom_commands luajit_target)
   ENDFOREACH(file)
 ENDMACRO()
 
-MACRO(LUAJIT_ADD_EXECUTABLE luajit_target)
+MACRO(LUA_ADD_EXECUTABLE luajit_target)
   LUAJIT_add_custom_commands(${luajit_target} ${ARGN})
   add_executable(${luajit_target} ${target_srcs})
-ENDMACRO(LUAJIT_ADD_EXECUTABLE luajit_target)
+ENDMACRO(LUA_ADD_EXECUTABLE luajit_target)

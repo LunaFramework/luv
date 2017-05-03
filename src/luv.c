@@ -211,6 +211,7 @@ static const luaL_Reg luv_functions[] = {
   {"fs_link", luv_fs_link},
   {"fs_symlink", luv_fs_symlink},
   {"fs_readlink", luv_fs_readlink},
+  {"fs_realpath", luv_fs_realpath},
   {"fs_chown", luv_fs_chown},
   {"fs_fchown", luv_fs_fchown},
 
@@ -221,11 +222,14 @@ static const luaL_Reg luv_functions[] = {
   // misc.c
   {"chdir", luv_chdir},
   {"os_homedir", luv_os_homedir},
+  {"os_tmpdir", luv_os_tmpdir},
+  {"os_get_passwd", luv_os_get_passwd},
   {"cpu_info", luv_cpu_info},
   {"cwd", luv_cwd},
   {"exepath", luv_exepath},
   {"get_process_title", luv_get_process_title},
   {"get_total_memory", luv_get_total_memory},
+  {"get_free_memory", luv_get_free_memory},
   {"getpid", luv_getpid},
 #ifndef _WIN32
   {"getuid", luv_getuid},
@@ -243,6 +247,10 @@ static const luaL_Reg luv_functions[] = {
   {"uptime", luv_uptime},
   {"version", luv_version},
   {"version_string", luv_version_string},
+#ifndef _WIN32
+  {"print_all_handles", luv_print_all_handles},
+  {"print_active_handles", luv_print_active_handles},
+#endif
 
   // thread.c
   {"new_thread", luv_new_thread},
@@ -405,6 +413,8 @@ static void luv_handle_init(lua_State* L) {
     luaL_newmetatable (L, "uv_"#lc);           \
     lua_pushcfunction(L, luv_handle_tostring); \
     lua_setfield(L, -2, "__tostring");         \
+    lua_pushcfunction(L, luv_handle_gc);       \
+    lua_setfield(L, -2, "__gc");               \
     luaL_newlib(L, luv_##lc##_methods);        \
     luaL_setfuncs(L, luv_handle_methods, 0);   \
     lua_setfield(L, -2, "__index");            \
@@ -441,18 +451,37 @@ static void luv_handle_init(lua_State* L) {
   lua_setfield(L, LUA_REGISTRYINDEX, "uv_stream");
 }
 
-lua_State* luv_state(uv_loop_t* loop) {
-  return loop->data;
+LUALIB_API lua_State* luv_state(uv_loop_t* loop) {
+  return (lua_State*)loop->data;
 }
 
 // TODO: find out if storing this somehow in an upvalue is faster
-uv_loop_t* luv_loop(lua_State* L) {
+LUALIB_API uv_loop_t* luv_loop(lua_State* L) {
   uv_loop_t* loop;
   lua_pushstring(L, "uv_loop");
   lua_rawget(L, LUA_REGISTRYINDEX);
-  loop = lua_touserdata(L, -1);
+  loop = (uv_loop_t*)lua_touserdata(L, -1);
   lua_pop(L, 1);
   return loop;
+}
+
+static void walk_cb(uv_handle_t *handle, void *arg)
+{
+  (void)arg;
+  if (!uv_is_closing(handle)) {
+    uv_close(handle, luv_close_cb);
+  }
+}
+
+static int loop_gc(lua_State *L) {
+  uv_loop_t* loop = luv_loop(L);
+  // Call uv_close on every active handle
+  uv_walk(loop, walk_cb, NULL);
+  // Run the event loop until all handles are successfully closed
+  while (uv_loop_close(loop)) {
+    uv_run(loop, UV_RUN_DEFAULT);
+  }
+  return 0;
 }
 
 LUALIB_API int luaopen_luv (lua_State *L) {
@@ -460,27 +489,36 @@ LUALIB_API int luaopen_luv (lua_State *L) {
   uv_loop_t* loop;
   int ret;
 
-  loop = lua_newuserdata(L, sizeof(*loop));
+  // Setup the uv_loop meta table for a proper __gc
+  luaL_newmetatable(L, "uv_loop.meta");
+  lua_pushstring(L, "__gc");
+  lua_pushcfunction(L, loop_gc);
+  lua_settable(L, -3);
+
+  loop = (uv_loop_t*)lua_newuserdata(L, sizeof(*loop));
   ret = uv_loop_init(loop);
   if (ret < 0) {
     return luaL_error(L, "%s: %s\n", uv_err_name(ret), uv_strerror(ret));
   }
+  // setup the metatable for __gc
+  luaL_getmetatable(L, "uv_loop.meta");
+  lua_setmetatable(L, -2);
   // Tell the state how to find the loop.
   lua_pushstring(L, "uv_loop");
   lua_insert(L, -2);
   lua_rawset(L, LUA_REGISTRYINDEX);
+  lua_pop(L, 1);
 
   // Tell the loop how to find the state.
   loop->data = L;
 
   luv_req_init(L);
   luv_handle_init(L);
-  luaL_newlib(L, luv_functions);
-  luv_constants(L);
-  lua_setfield(L, -2, "constants");
-
   luv_thread_init(L);
   luv_work_init(L);
 
+  luaL_newlib(L, luv_functions);
+  luv_constants(L);
+  lua_setfield(L, -2, "constants");
   return 1;
 }

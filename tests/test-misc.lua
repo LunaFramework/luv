@@ -20,7 +20,8 @@ return require('lib/tap')(function (test)
   test("memory size", function (print, p, expect, uv)
     local rss = uv.resident_set_memory()
     local total = uv.get_total_memory()
-    p{rss=rss,total=total}
+    local free = uv.get_free_memory()
+    p{rss=rss,total=total,free=free}
     assert(rss < total)
   end)
 
@@ -60,6 +61,16 @@ return require('lib/tap')(function (test)
   test("uv.os_homedir", function (print, p, expect, uv)
     local path = assert(uv.os_homedir())
     p(path)
+  end)
+
+  test("uv.os_tmpdir", function (print, p, expect, uv)
+    local path = assert(uv.os_tmpdir())
+    p(path)
+  end)
+
+  test("uv.os_get_passwd", function (print, p, expect, uv)
+    local passwd = assert(uv.os_get_passwd())
+    p(passwd)
   end)
 
   test("uv.cwd and uv.chdir", function (print, p, expect, uv)

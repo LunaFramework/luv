@@ -1,5 +1,5 @@
 # Modfied from luajit.cmake
-# Added LUAJIT_ADD_EXECUTABLE Ryan Phillips <ryan at trolocsis.com>
+# Added LUA_ADD_EXECUTABLE Ryan Phillips <ryan at trolocsis.com>
 # This CMakeLists.txt has been first taken from LuaDist
 # Copyright (C) 2007-2011 LuaDist.
 # Created by Peter Drahoš
@@ -8,11 +8,10 @@
 
 #project(Lua53 C)
 
-SET(LUA_DIR ${CMAKE_CURRENT_LIST_DIR}/lua)
+SET(LUA_DIR ${CMAKE_CURRENT_LIST_DIR}/lua CACHE PATH "location of lua sources")
 
 SET(CMAKE_REQUIRED_INCLUDES
   ${LUA_DIR}
-  ${LUA_DIR}/src
   ${CMAKE_CURRENT_BINARY_DIR}
 )
 
@@ -56,55 +55,55 @@ endif ()
 
 ## SOURCES
 SET(SRC_LUALIB
-  ${LUA_DIR}/src/lbaselib.c
-  ${LUA_DIR}/src/lcorolib.c
-  ${LUA_DIR}/src/ldblib.c
-  ${LUA_DIR}/src/liolib.c
-  ${LUA_DIR}/src/lmathlib.c
-  ${LUA_DIR}/src/loadlib.c
-  ${LUA_DIR}/src/loslib.c
-  ${LUA_DIR}/src/lstrlib.c
-  ${LUA_DIR}/src/ltablib.c
-  ${LUA_DIR}/src/lutf8lib.c)
+  ${LUA_DIR}/lbaselib.c
+  ${LUA_DIR}/lcorolib.c
+  ${LUA_DIR}/ldblib.c
+  ${LUA_DIR}/liolib.c
+  ${LUA_DIR}/lmathlib.c
+  ${LUA_DIR}/loadlib.c
+  ${LUA_DIR}/loslib.c
+  ${LUA_DIR}/lstrlib.c
+  ${LUA_DIR}/ltablib.c
+  ${LUA_DIR}/lutf8lib.c)
 
 SET(SRC_LUACORE
-  ${LUA_DIR}/src/lauxlib.c
-  ${LUA_DIR}/src/lapi.c
-  ${LUA_DIR}/src/lcode.c
-  ${LUA_DIR}/src/lctype.c
-  ${LUA_DIR}/src/ldebug.c
-  ${LUA_DIR}/src/ldo.c
-  ${LUA_DIR}/src/ldump.c
-  ${LUA_DIR}/src/lfunc.c
-  ${LUA_DIR}/src/lgc.c
-  ${LUA_DIR}/src/linit.c
-  ${LUA_DIR}/src/llex.c
-  ${LUA_DIR}/src/lmem.c
-  ${LUA_DIR}/src/lobject.c
-  ${LUA_DIR}/src/lopcodes.c
-  ${LUA_DIR}/src/lparser.c
-  ${LUA_DIR}/src/lstate.c
-  ${LUA_DIR}/src/lstring.c
-  ${LUA_DIR}/src/ltable.c
-  ${LUA_DIR}/src/ltm.c
-  ${LUA_DIR}/src/lundump.c
-  ${LUA_DIR}/src/lvm.c
-  ${LUA_DIR}/src/lzio.c
+  ${LUA_DIR}/lauxlib.c
+  ${LUA_DIR}/lapi.c
+  ${LUA_DIR}/lcode.c
+  ${LUA_DIR}/lctype.c
+  ${LUA_DIR}/ldebug.c
+  ${LUA_DIR}/ldo.c
+  ${LUA_DIR}/ldump.c
+  ${LUA_DIR}/lfunc.c
+  ${LUA_DIR}/lgc.c
+  ${LUA_DIR}/linit.c
+  ${LUA_DIR}/llex.c
+  ${LUA_DIR}/lmem.c
+  ${LUA_DIR}/lobject.c
+  ${LUA_DIR}/lopcodes.c
+  ${LUA_DIR}/lparser.c
+  ${LUA_DIR}/lstate.c
+  ${LUA_DIR}/lstring.c
+  ${LUA_DIR}/ltable.c
+  ${LUA_DIR}/ltm.c
+  ${LUA_DIR}/lundump.c
+  ${LUA_DIR}/lvm.c
+  ${LUA_DIR}/lzio.c
   ${SRC_LUALIB})
 
 ## GENERATE
 
 IF(WITH_SHARED_LUA)
   IF(WITH_AMALG)
-    add_library(lualib SHARED ${LUA_DIR}/../lua_one.c ${DEPS})
+    add_library(lualib SHARED ${LUA_DIR}/../lua_one.c)
   ELSE()
-    add_library(lualib SHARED ${SRC_LUACORE} ${DEPS} )
+    add_library(lualib SHARED ${SRC_LUACORE})
   ENDIF()
 ELSE()
   IF(WITH_AMALG)
-    add_library(lualib STATIC ${LUA_DIR}/../lua_one.c ${DEPS} )
+    add_library(lualib STATIC ${LUA_DIR}/../lua_one.c )
   ELSE()
-    add_library(lualib STATIC ${SRC_LUACORE} ${DEPS} )
+    add_library(lualib STATIC ${SRC_LUACORE} )
   ENDIF()
   set_target_properties(lualib PROPERTIES
     PREFIX "lib" IMPORT_PREFIX "lib")
@@ -113,16 +112,55 @@ ENDIF()
 target_link_libraries (lualib ${LIBS} )
 set_target_properties (lualib PROPERTIES OUTPUT_NAME "lua53")
 
+add_executable(lua ${LUA_DIR}/lua.c)
 IF(WIN32)
-  add_executable(lua ${LUA_DIR}/src/lua.c)
   target_link_libraries(lua lualib)
 ELSE()
-  IF(WITH_AMALG)
-    add_executable(lua ${LUA_DIR}/src/lua.c ${LUA_DIR}/lua_one.c ${DEPS})
-  ELSE()
-    add_executable(lua ${LUA_DIR}/src/lua.c ${SRC_LUACORE} ${DEPS})
-  ENDIF()
-  target_link_libraries(lua ${LIBS})
+  target_link_libraries(lua lualib ${LIBS})
   SET_TARGET_PROPERTIES(lua PROPERTIES ENABLE_EXPORTS ON)
 ENDIF(WIN32)
 
+MACRO(LUA_add_custom_commands luajit_target)
+  SET(target_srcs "")
+  FOREACH(file ${ARGN})
+    IF(${file} MATCHES ".*\\.lua$")
+      set(file "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
+      set(source_file ${file})
+      string(LENGTH ${CMAKE_SOURCE_DIR} _luajit_source_dir_length)
+      string(LENGTH ${file} _luajit_file_length)
+      math(EXPR _begin "${_luajit_source_dir_length} + 1")
+      math(EXPR _stripped_file_length "${_luajit_file_length} - ${_luajit_source_dir_length} - 1")
+      string(SUBSTRING ${file} ${_begin} ${_stripped_file_length} stripped_file)
+
+      set(generated_file "${CMAKE_BINARY_DIR}/luacode_tmp/${stripped_file}_${luajit_target}_generated.c")
+
+      add_custom_command(
+        OUTPUT ${generated_file}
+        MAIN_DEPENDENCY ${source_file}
+        DEPENDS lua
+        COMMAND lua
+	ARGS "${LUA_DIR}/../luac.lua"
+          ${source_file}
+          ${generated_file}
+        COMMENT "Building Lua ${source_file}: ${generated_file}"
+      )
+
+      get_filename_component(basedir ${generated_file} PATH)
+      file(MAKE_DIRECTORY ${basedir})
+
+      set(target_srcs ${target_srcs} ${generated_file})
+      set_source_files_properties(
+        ${generated_file}
+        properties
+        generated true        # to say that "it is OK that the obj-files do not exist before build time"
+      )
+    ELSE()
+      set(target_srcs ${target_srcs} ${file})
+    ENDIF(${file} MATCHES ".*\\.lua$")
+  ENDFOREACH(file)
+ENDMACRO()
+
+MACRO(LUA_ADD_EXECUTABLE luajit_target)
+  LUA_add_custom_commands(${luajit_target} ${ARGN})
+  add_executable(${luajit_target} ${target_srcs})
+ENDMACRO(LUA_ADD_EXECUTABLE luajit_target)

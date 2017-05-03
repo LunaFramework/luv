@@ -174,13 +174,13 @@ static int luv_interface_addresses(lua_State* L) {
   uv_interface_address_t* interfaces;
   int count, i;
   char ip[INET6_ADDRSTRLEN];
+  char netmask[INET6_ADDRSTRLEN];
 
   uv_interface_addresses(&interfaces, &count);
 
   lua_newtable(L);
 
   for (i = 0; i < count; i++) {
-
     lua_getfield(L, -1, interfaces[i].name);
     if (!lua_istable(L, -1)) {
       lua_pop(L, 1);
@@ -196,14 +196,20 @@ static int luv_interface_addresses(lua_State* L) {
     lua_setfield(L, -2, "mac");
 
     if (interfaces[i].address.address4.sin_family == AF_INET) {
-      uv_ip4_name(&interfaces[i].address.address4,ip, sizeof(ip));
+      uv_ip4_name(&interfaces[i].address.address4, ip, sizeof(ip));
+      uv_ip4_name(&interfaces[i].netmask.netmask4, netmask, sizeof(netmask));
     } else if (interfaces[i].address.address4.sin_family == AF_INET6) {
       uv_ip6_name(&interfaces[i].address.address6, ip, sizeof(ip));
+      uv_ip6_name(&interfaces[i].netmask.netmask6, netmask, sizeof(netmask));
     } else {
       strncpy(ip, "<unknown sa family>", INET6_ADDRSTRLEN);
+      strncpy(netmask, "<unknown sa family>", INET6_ADDRSTRLEN);
     }
     lua_pushstring(L, ip);
     lua_setfield(L, -2, "ip");
+    lua_pushstring(L, netmask);
+    lua_setfield(L, -2, "netmask");
+
     lua_pushstring(L, luv_af_num_to_string(interfaces[i].address.address4.sin_family));
     lua_setfield(L, -2, "family");
     lua_rawseti(L, -2, lua_rawlen (L, -2) + 1);
@@ -247,6 +253,15 @@ static int luv_chdir(lua_State* L) {
   return 1;
 }
 
+static int luv_os_tmpdir(lua_State* L) {
+  size_t size = 2*PATH_MAX;
+  char tmpdir[2*PATH_MAX];
+  int ret = uv_os_tmpdir(tmpdir, &size);
+  if (ret < 0) return luv_error(L, ret);
+  lua_pushlstring(L, tmpdir, size);
+  return 1;
+}
+
 static int luv_os_homedir(lua_State* L) {
   size_t size = 2*PATH_MAX;
   char homedir[2*PATH_MAX];
@@ -256,8 +271,42 @@ static int luv_os_homedir(lua_State* L) {
   return 1;
 }
 
+static int luv_os_get_passwd(lua_State* L) {
+  uv_passwd_t pwd;
+  int ret = uv_os_get_passwd(&pwd);
+  if (ret < 0) return luv_error(L, ret);
+  lua_newtable(L);
+  if (pwd.username) {
+    lua_pushstring(L, pwd.username);
+    lua_setfield(L, -2, "username");
+  }
+  if (pwd.uid >= 0) {
+    lua_pushinteger(L, pwd.uid);
+    lua_setfield(L, -2, "uid");
+  }
+  if (pwd.gid >= 0) {
+    lua_pushinteger(L, pwd.gid);
+    lua_setfield(L, -2, "gid");
+  }
+  if (pwd.shell) {
+    lua_pushstring(L, pwd.shell);
+    lua_setfield(L, -2, "shell");
+  }
+  if (pwd.homedir) {
+    lua_pushstring(L, pwd.homedir);
+    lua_setfield(L, -2, "homedir");
+  }
+  uv_os_free_passwd(&pwd);
+  return 1;
+}
+
 static int luv_get_total_memory(lua_State* L) {
   lua_pushnumber(L, uv_get_total_memory());
+  return 1;
+}
+
+static int luv_get_free_memory(lua_State* L) {
+  lua_pushnumber(L, uv_get_free_memory());
   return 1;
 }
 
@@ -302,4 +351,17 @@ static int luv_setgid(lua_State* L){
   }
   return 0;
 }
+
+#ifndef _WIN32
+static int luv_print_all_handles(lua_State* L){
+  uv_print_all_handles(luv_loop(L), stderr);
+  return 0;
+}
+
+static int luv_print_active_handles(lua_State* L){
+  uv_print_active_handles(luv_loop(L), stderr);
+  return 0;
+}
+#endif
+
 #endif
